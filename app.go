@@ -14,10 +14,14 @@ func (a *App) initApp() {
 	a.NewRouter()
 	// initialize log
 	initLog()
+	// initialize Database store
+	store = &dbStore{
+		db: make(map[int]Todo),
+	}
 }
 
 type App struct {
-	// DB     map[string]string
+	// DB     dbStore
 	Router *mux.Router
 	// Log string // possibly?
 }
