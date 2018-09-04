@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -14,10 +15,16 @@ func (a *App) initApp() {
 	a.NewRouter()
 	// initialize log
 	initLog()
-	// initialize Database store
-	store = &dbStore{
+	// initialize database and store
+	d := &dbStore{
 		db: make(map[int]Todo),
 	}
+	err := d.loadFromJSON()
+	if err != nil {
+		fmt.Println(err)
+	}
+	InitStore(d)
+
 }
 
 type App struct {

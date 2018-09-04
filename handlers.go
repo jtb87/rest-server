@@ -4,19 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 )
 
 func (a *App) InitializeRoutes() {
-	//api := a.Router.PathPrefix("/exp2").Subrouter()
-	// exp.Use(authMiddleWareJWT)
 	a.Router.HandleFunc("/todo", a.CreateTodo).Methods("POST")
 	a.Router.HandleFunc("/todo", a.GetTodo).Methods("GET")
 	a.Router.HandleFunc("/todo/{id}", a.UpdateTodo).Methods("PUT")
 	a.Router.HandleFunc("/todo/{id}", a.DeleteTodo).Methods("DELETE")
-	a.Router.HandleFunc("/todo/save", a.saveToJSON).Methods("GET")
 	// health checks
 	a.Router.HandleFunc("/", a.health).Methods("GET")
 
@@ -44,7 +40,12 @@ func (a *App) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, "Invalid request payload")
 		return
 	}
-	if err := store.TodoCreater(&t); err != nil {
+	// set values on todo
+	inc++
+	t.Id = inc
+	t.CreatedDate = setTimeNow()
+	// update store
+	if err := store.TodoCreater(t); err != nil {
 		respondWithError(w, err.Error())
 		return
 	}
@@ -86,20 +87,4 @@ func (a *App) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusNoContent, nil)
-}
-
-func (a *App) saveToJSON(w http.ResponseWriter, r *http.Request) {
-	d, err := store.TodoGetter()
-	if err != nil {
-		respondWithError(w, err.Error())
-		return
-	}
-	var b []byte
-	b, err = json.Marshal(d)
-	if err != nil {
-		respondWithError(w, err.Error())
-		return
-	}
-	ioutil.WriteFile("database.json", b, 0666)
-	respondWithJSON(w, http.StatusOK, nil)
 }

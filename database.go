@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"sync"
 	"time"
 )
 
+// const values
 const TimeFormat = "2006-01-02 15:04:05"
 
 var store Store
@@ -15,9 +18,11 @@ var inc int
 
 type Store interface {
 	TodoGetter() ([]Todo, error)
-	TodoCreater(*Todo) error
+	TodoCreater(Todo) error
 	TodoDeleter(id int) error
 	TodoUpdater(int, *Todo) error
+	loadFromJSON() error
+	storeAsJSON() error
 }
 
 type dbStore struct {
@@ -30,11 +35,13 @@ func InitStore(s Store) {
 }
 
 type Todo struct {
-	Completed   *bool   `json:"completed"`
-	Description *string `json:"description"`
-	CreatedDate string  `json:"created_date"`
-	Id          int     `json:"id"`
-	Name        *string `json:"name"`
+	Completed   bool   `json:"completed"`
+	Description string `json:"description"`
+	CreatedDate string `json:"created_date"`
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	Tag         string `json:"complete_before"`
+	Hide        bool   `json:"hide"`
 }
 
 func (s *dbStore) TodoGetter() ([]Todo, error) {
@@ -47,21 +54,26 @@ func (s *dbStore) TodoGetter() ([]Todo, error) {
 	return tL, nil
 }
 
-func (s *dbStore) TodoCreater(t *Todo) error {
+func (s *dbStore) TodoCreater(t Todo) error {
 	s.lock.Lock()
-	defer s.lock.Unlock()
-	inc++
-	t.CreatedDate = time.Now().Format(TimeFormat)
-	t.Id = inc
-	s.db[t.Id] = *t
+	s.db[t.Id] = t
+	s.lock.Unlock()
+	err := s.storeAsJSON()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s *dbStore) TodoDeleter(id int) error {
 	if _, ok := s.db[id]; ok {
 		s.lock.Lock()
-		defer s.lock.Unlock()
 		delete(s.db, id)
+		s.lock.Unlock()
+		err := s.storeAsJSON()
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 	err := fmt.Errorf("id: %v not found", id)
@@ -70,20 +82,69 @@ func (s *dbStore) TodoDeleter(id int) error {
 
 func (s *dbStore) TodoUpdater(id int, t *Todo) error {
 	if v, ok := s.db[id]; ok {
-		if t.Completed != nil {
-			v.Completed = t.Completed
-		}
-		if t.Description != nil {
-			v.Description = t.Description
-		}
-		if t.Name != nil {
-			v.Name = t.Name
-		}
+		v.Completed = t.Completed
+		v.Description = t.Description
+		v.Name = t.Name
 		s.lock.Lock()
-		defer s.lock.Unlock()
 		s.db[id] = v
+		s.lock.Unlock()
+		err := s.storeAsJSON()
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 	err := fmt.Errorf("id: %v not found", id)
 	return err
+}
+
+func (s *dbStore) storeAsJSON() error {
+	d, err := s.TodoGetter()
+	if err != nil {
+		return err
+	}
+	var b []byte
+	b, err = json.Marshal(d)
+	if err != nil {
+		return err
+	}
+	writeJsonFile(b)
+	return nil
+}
+
+func (s *dbStore) loadFromJSON() error {
+	f, err := ioutil.ReadFile("database.json")
+	if err != nil {
+		b := []byte("[]")
+		writeJsonFile(b)
+		return fmt.Errorf("%s", "database.json did not exist created now")
+	}
+	var todos []Todo
+	err = json.Unmarshal(f, &todos)
+	if err != nil {
+		return err
+	}
+	for _, v := range todos {
+		err := s.TodoCreater(v)
+		if err != nil {
+			return err
+		}
+		setBiggestAsInc(v.Id)
+	}
+	return nil
+}
+
+func setBiggestAsInc(id int) {
+	if id > inc {
+		inc = id
+	}
+}
+
+func setTimeNow() string {
+	t := time.Now()
+	return t.Format(TimeFormat)
+}
+
+func writeJsonFile(b []byte) {
+	ioutil.WriteFile("database.json", b, 0666)
 }
